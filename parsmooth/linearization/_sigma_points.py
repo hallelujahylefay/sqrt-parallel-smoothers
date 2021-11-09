@@ -108,18 +108,21 @@ def linearize_functional_x(f, x, q, get_sigma_points):
     if isinstance(x, MVNSqrt):
         m_x, chol_x = x
         m_q, chol_q = q
-        Phi = _cov(x_pts.wc, f_pts, m_f, f_pts, m_f)
         sqrt_Phi = jnp.sqrt(x_pts.wc[:, None]) * (f_pts - m_f[None, :])
-        sqrt_Phi = tria(sqrt_Phi.T)
+        n_sigma_points, dim_out = sqrt_Phi.shape
+        if n_sigma_points >= dim_out:
+            sqrt_Phi = tria(sqrt_Phi.T)
+        else:
+            sqrt_Phi = jnp.concatenate([sqrt_Phi.T, jnp.zeros((dim_out, dim_out - n_sigma_points))], axis=1)
         chol_L = cholesky_update_many(sqrt_Phi, (F_x @ chol_x).T, -1.)
         chol_L = tria(jnp.concatenate([chol_L, chol_q], axis=1))
-        return F_x, chol_L, m_f - F_x @ m_x
+        return F_x, chol_L, m_f - F_x @ m_x + m_q
     m_x, cov_x = x
-    _, cov_q = q
+    m_q, cov_q = q
     Phi = _cov(x_pts.wc, f_pts, m_f, f_pts, m_f)
     L = Phi - F_x @ cov_x @ F_x.T + cov_q
 
-    return F_x, 0.5 * (L + L.T), m_f - F_x @ m_x
+    return F_x, 0.5 * (L + L.T), m_f - F_x @ m_x + m_q
 
 
 def _linearize_functional_common_x(f, x, get_sigma_points):
@@ -132,7 +135,7 @@ def _linearize_functional_common_x(f, x, get_sigma_points):
     m_f = jnp.dot(x_pts.wm, f_pts)
 
     Psi_x = _cov(x_pts.wc, x_pts.points, m_x, f_pts, m_f)
-    F_x = solve(chol_x @ chol_x.T, Psi_x,  sym_pos=True).T
+    F_x = cho_solve((chol_x, True), Psi_x).T
 
     return F_x, x_pts, f_pts, m_f
 
