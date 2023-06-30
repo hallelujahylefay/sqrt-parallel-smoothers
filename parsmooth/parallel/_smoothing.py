@@ -13,7 +13,8 @@ from parsmooth.parallel._operators import sqrt_smoothing_operator, \
 def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
               filter_trajectory: Union[MVNSqrt, MVNStandard],
               linearization_method: Callable,
-              nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None):
+              nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
+              params_transition: jnp.ndarray = None):
     if nominal_trajectory is not None:
         are_inputs_compatible(filter_trajectory, nominal_trajectory)
 
@@ -28,14 +29,14 @@ def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
 
     if isinstance(filter_trajectory, MVNSqrt):
         associative_params = _associative_params(linearization_method, transition_model,
-                                                 nominal_trajectory, filter_trajectory, True)
+                                                 nominal_trajectory, filter_trajectory, True, params_transition)
         smoothed_means, _, smoothed_chols = jax.lax.associative_scan(jax.vmap(sqrt_smoothing_operator),
                                                                      associative_params, reverse=True)
         res = jax.vmap(MVNSqrt)(smoothed_means, smoothed_chols)
 
     else:
         associative_params = _associative_params(linearization_method, transition_model,
-                                                 nominal_trajectory, filter_trajectory, False)
+                                                 nominal_trajectory, filter_trajectory, False, params_transition)
         smoothed_means, _, smoothed_covs = jax.lax.associative_scan(jax.vmap(standard_smoothing_operator),
                                                                     associative_params, reverse=True)
         res = jax.vmap(MVNStandard)(smoothed_means, smoothed_covs)
@@ -44,20 +45,21 @@ def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
 
 
 def _associative_params(linearization_method, transition_model,
-                        nominal_trajectory, filtering_trajectory, sqrt):
+                        nominal_trajectory, filtering_trajectory, sqrt, params_transition):
     ms, Ps = filtering_trajectory
     nominal_trajectory = jax.tree_map(lambda z: z[:-1], nominal_trajectory)
+    params_transition = jax.tree_map(lambda z: z[1:], params_transition) if params_transition else None
     if sqrt:
-        vmapped_fn = jax.vmap(_sqrt_associative_params, in_axes=[None, None, 0, 0, 0])
+        vmapped_fn = jax.vmap(_sqrt_associative_params, in_axes=[None, None, 0, 0, 0, 0])
     else:
-        vmapped_fn = jax.vmap(_standard_associative_params, in_axes=[None, None, 0, 0, 0])
-    gs, Es, Ls = vmapped_fn(linearization_method, transition_model, nominal_trajectory, ms[:-1], Ps[:-1])
+        vmapped_fn = jax.vmap(_standard_associative_params, in_axes=[None, None, 0, 0, 0, 0])
+    gs, Es, Ls = vmapped_fn(linearization_method, transition_model, nominal_trajectory, ms[:-1], Ps[:-1], params_transition)
     g_T, E_T, L_T = ms[-1], jnp.zeros_like(Ps[-1]), Ps[-1]
     return none_or_concat((gs, Es, Ls), (g_T, E_T, L_T), -1)
 
 
-def _standard_associative_params(linearization_method, transition_model, n_k_1, m, P):
-    F, Q, b = linearization_method(transition_model, n_k_1)
+def _standard_associative_params(linearization_method, transition_model, n_k_1, m, P, p_t_k=None):
+    F, Q, b = linearization_method(transition_model, n_k_1, p_t_k)
     Pp = F @ P @ F.T + Q
 
     E = jlinalg.solve(Pp, F @ P, sym_pos=True).T
@@ -68,8 +70,8 @@ def _standard_associative_params(linearization_method, transition_model, n_k_1, 
     return g, E, L
 
 
-def _sqrt_associative_params(linearization_method, transition_model, n_k_1, m, chol_P):
-    F, chol_Q, b = linearization_method(transition_model, n_k_1)
+def _sqrt_associative_params(linearization_method, transition_model, n_k_1, m, chol_P, p_t_k=None):
+    F, chol_Q, b = linearization_method(transition_model, n_k_1, p_t_k)
     nx = chol_Q.shape[0]
 
     Phi = jnp.block([[F @ chol_P, chol_Q],

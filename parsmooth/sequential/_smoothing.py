@@ -11,7 +11,8 @@ from parsmooth._utils import tria, none_or_shift, none_or_concat
 def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
               filter_trajectory: Union[MVNSqrt, MVNStandard],
               linearization_method: Callable,
-              nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None):
+              nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
+              params_transition: jnp.ndarray = None):
     last_state = jax.tree_map(lambda z: z[-1], filter_trajectory)
 
     if nominal_trajectory is not None:
@@ -24,17 +25,18 @@ def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
         return _standard_smooth(F_x, cov_or_chol, b, xf, xs)
 
     def body(smoothed, inputs):
-        filtered, ref = inputs
+        filtered, ref, p_t_k = inputs
         if ref is None:
             ref = smoothed
-        F_x, cov_or_chol, b = linearization_method(transition_model, ref)
+        F_x, cov_or_chol, b = linearization_method(transition_model, ref, p_t_k)
         smoothed_state = smooth_one(F_x, cov_or_chol, b, filtered, smoothed)
 
         return smoothed_state, smoothed_state
 
     _, smoothed_states = jax.lax.scan(body,
                                       last_state,
-                                      [none_or_shift(filter_trajectory, -1), none_or_shift(nominal_trajectory, -1)],
+                                      [none_or_shift(filter_trajectory, -1), none_or_shift(nominal_trajectory, -1),
+                                       none_or_shift(params_transition, 1)],
                                       reverse=True)
 
     smoothed_states = none_or_concat(smoothed_states, last_state, -1)

@@ -15,7 +15,9 @@ def filtering(observations: jnp.ndarray,
               observation_model: Union[FunctionalModel, ConditionalMomentsModel],
               linearization_method: Callable,
               nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-              return_loglikelihood=False):
+              return_loglikelihood=False,
+              params_transition: Optional[jnp.ndarray] = None,
+              params_observation: Optional[jnp.ndarray] = None):
     T = observations.shape[0]
     m0, chol_or_cov_0 = x0
     if nominal_trajectory is not None:
@@ -29,7 +31,7 @@ def filtering(observations: jnp.ndarray,
     if isinstance(x0, MVNSqrt):
         associative_params, linearized_ssm = _sqrt_associative_params(linearization_method, transition_model,
                                                                       observation_model,
-                                                                      nominal_trajectory, x0, observations)
+                                                                      nominal_trajectory, x0, observations, params_transition, params_observation)
         _, filtered_means, filtered_chol_or_cov, _, _ = jax.lax.associative_scan(jax.vmap(sqrt_filtering_operator),
                                                                                  associative_params)
 
@@ -37,7 +39,7 @@ def filtering(observations: jnp.ndarray,
     else:
         associative_params, linearized_ssm = _standard_associative_params(linearization_method, transition_model,
                                                                           observation_model,
-                                                                          nominal_trajectory, x0, observations)
+                                                                          nominal_trajectory, x0, observations, params_transition, params_observation)
         _, filtered_means, filtered_chol_or_cov, _, _ = jax.lax.associative_scan(jax.vmap(standard_filtering_operator),
                                                                                  associative_params)
 
@@ -61,22 +63,24 @@ def filtering(observations: jnp.ndarray,
 
 
 def _standard_associative_params(linearization_method, transition_model, observation_model,
-                                 nominal_trajectory, x0, ys):
+                                 nominal_trajectory, x0, ys, params_transition, params_observation):
     T = ys.shape[0]
     n_k_1 = jax.tree_map(lambda z: z[:-1], nominal_trajectory)
     n_k = jax.tree_map(lambda z: z[1:], nominal_trajectory)
+    p_t_k = jax.tree_map(lambda z: z[1:], params_transition) if params_transition else None
+    p_o_k = jax.tree_map(lambda z: z[1:], params_observation) if params_observation else None
 
     m0, P0 = x0
     ms = jnp.concatenate([m0[None, ...], jnp.zeros_like(m0, shape=(T - 1,) + m0.shape)])
     Ps = jnp.concatenate([P0[None, ...], jnp.zeros_like(P0, shape=(T - 1,) + P0.shape)])
 
-    vmapped_fn = jax.vmap(_standard_associative_params_one, in_axes=[None, None, None, 0, 0, 0, 0, 0])
-    return vmapped_fn(linearization_method, transition_model, observation_model, n_k_1, n_k, ms, Ps, ys)
+    vmapped_fn = jax.vmap(_standard_associative_params_one, in_axes=[None, None, None, 0, 0, 0, 0, 0, 0, 0])
+    return vmapped_fn(linearization_method, transition_model, observation_model, n_k_1, n_k, ms, Ps, ys, p_t_k, p_o_k)
 
 
-def _standard_associative_params_one(linearization_method, transition_model, observation_model, n_k_1, n_k, m, P, y):
-    F, Q, b = linearization_method(transition_model, n_k_1)
-    H, R, c = linearization_method(observation_model, n_k)
+def _standard_associative_params_one(linearization_method, transition_model, observation_model, n_k_1, n_k, m, P, y, p_t_k=None, p_o_k=None):
+    F, Q, b = linearization_method(transition_model, n_k_1, p_t_k)
+    H, R, c = linearization_method(observation_model, n_k, p_o_k)
 
     m = F @ m + b
     P = F @ P @ F.T + Q
@@ -97,25 +101,27 @@ def _standard_associative_params_one(linearization_method, transition_model, obs
 
 
 def _sqrt_associative_params(linearization_method, transition_model, observation_model,
-                             nominal_trajectory, x0, ys):
+                             nominal_trajectory, x0, ys, params_transition, params_observation):
     T = ys.shape[0]
     n_k_1 = jax.tree_map(lambda z: z[:-1], nominal_trajectory)
     n_k = jax.tree_map(lambda z: z[1:], nominal_trajectory)
+    p_t_k = jax.tree_map(lambda z: z[1:], params_transition) if params_transition else None
+    p_o_k = jax.tree_map(lambda z: z[1:], params_observation) if params_observation else None
 
     m0, L0 = x0
     ms = jnp.concatenate([m0[None, ...], jnp.zeros_like(m0, shape=(T - 1,) + m0.shape)])
     Ls = jnp.concatenate([L0[None, ...], jnp.zeros_like(L0, shape=(T - 1,) + L0.shape)])
 
-    vmapped_fn = jax.vmap(_sqrt_associative_params_one, in_axes=[None, None, None, 0, 0, 0, 0, 0])
+    vmapped_fn = jax.vmap(_sqrt_associative_params_one, in_axes=[None, None, None, 0, 0, 0, 0, 0, 0, 0])
 
-    return vmapped_fn(linearization_method, transition_model, observation_model, n_k_1, n_k, ms, Ls, ys)
+    return vmapped_fn(linearization_method, transition_model, observation_model, n_k_1, n_k, ms, Ls, ys, p_t_k, p_o_k)
 
 
 def _sqrt_associative_params_one(linearization_method, transition_model, observation_model,
-                                 n_k_1, n_k, m0, L0, y):
-    F, cholQ, b = linearization_method(transition_model, n_k_1)
+                                 n_k_1, n_k, m0, L0, y, p_t_k=None, p_o_k=None):
+    F, cholQ, b = linearization_method(transition_model, n_k_1, p_t_k)
 
-    H, cholR, c = linearization_method(observation_model, n_k)
+    H, cholR, c = linearization_method(observation_model, n_k, p_o_k)
 
     nx = cholQ.shape[0]
     ny = cholR.shape[0]

@@ -42,9 +42,10 @@ def _seq_sampling(key: jnp.ndarray,
                   transition_model: FunctionalModel,
                   filter_trajectory: MVNSqrt or MVNStandard,
                   linearization_method: Callable,
-                  nominal_trajectory: Union[MVNSqrt, MVNStandard]):
+                  nominal_trajectory: Union[MVNSqrt, MVNStandard],
+                  params_transition: jnp.ndarray):
     gains, incs, last_state_sample = _sampling_common(key, n_samples, transition_model, filter_trajectory,
-                                                      linearization_method, nominal_trajectory)
+                                                      linearization_method, nominal_trajectory, params_transition)
 
     def body(prev_xs, inputs):
         gain, inc = inputs
@@ -65,11 +66,13 @@ def _sampling_common(key: jnp.ndarray,
                      transition_model: FunctionalModel,
                      filter_trajectory: MVNSqrt or MVNStandard,
                      linearization_method: Callable,
-                     nominal_trajectory: Union[MVNSqrt, MVNStandard]):
+                     nominal_trajectory: Union[MVNSqrt, MVNStandard],
+                     params_transition: jnp.ndarray):
     last_state = jax.tree_map(lambda z: z[-1], filter_trajectory)
     filter_trajectory = none_or_shift(filter_trajectory, -1)
-    F_x, cov_or_chol, b = jax.vmap(linearization_method, in_axes=[None, 0])(transition_model,
-                                                                            none_or_shift(nominal_trajectory, -1))
+    F_x, cov_or_chol, b = jax.vmap(linearization_method, in_axes=[None, 0, 0])(transition_model,
+                                                                            none_or_shift(nominal_trajectory, -1),
+                                                                            none_or_shift(params_transition, 1))
     T = F_x.shape[0]
     eps = jax.random.normal(key, (T + 1, n_samples) + b.shape[1:])
 

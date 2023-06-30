@@ -14,7 +14,9 @@ def filtering(observations: jnp.ndarray,
               observation_model: Union[FunctionalModel, ConditionalMomentsModel],
               linearization_method: Callable,
               nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-              return_loglikelihood: bool = False):
+              return_loglikelihood: bool = False,
+              params_transition: jnp.ndarray = None,
+              params_observation: jnp.ndarray = None):
     if nominal_trajectory is not None:
         are_inputs_compatible(x0, nominal_trajectory)
 
@@ -30,22 +32,24 @@ def filtering(observations: jnp.ndarray,
 
     def body(carry, inp):
         x, ell = carry
-        y, predict_ref, update_ref = inp
+        y, predict_ref, update_ref, p_k, p2_k = inp
 
         if predict_ref is None:
             predict_ref = x
-        F_x, cov_or_chol_Q, b = linearization_method(transition_model, predict_ref)
+        F_x, cov_or_chol_Q, b = linearization_method(transition_model, predict_ref, p_k)
         x = predict(F_x, cov_or_chol_Q, b, x)
         if update_ref is None:
             update_ref = x
-        H_x, cov_or_chol_R, c = linearization_method(observation_model, update_ref)
+        H_x, cov_or_chol_R, c = linearization_method(observation_model, update_ref, p2_k)
         x, ell_inc = update(H_x, cov_or_chol_R, c, x, y)
         return (x, ell + ell_inc), x
 
     predict_traj = none_or_shift(nominal_trajectory, -1)
     update_traj = none_or_shift(nominal_trajectory, 1)
+    p_k = none_or_shift(params_transition, 1)
+    p2_k = none_or_shift(params_observation, 1)
 
-    (_, ell), xs = jax.lax.scan(body, (x0, 0.), (observations, predict_traj, update_traj))
+    (_, ell), xs = jax.lax.scan(body, (x0, 0.), (observations, predict_traj, update_traj, p_k, p2_k))
     xs = none_or_concat(xs, x0, 1)
     if return_loglikelihood:
         return xs, ell

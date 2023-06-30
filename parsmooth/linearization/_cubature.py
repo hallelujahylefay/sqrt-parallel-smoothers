@@ -7,7 +7,7 @@ from parsmooth._base import MVNStandard, FunctionalModel, ConditionalMomentsMode
 from parsmooth.linearization._sigma_points import SigmaPoints, linearize_functional, linearize_conditional
 
 
-def linearize(model: Union[FunctionalModel, ConditionalMomentsModel], x: Union[MVNSqrt, MVNStandard]):
+def linearize(model: Union[FunctionalModel, ConditionalMomentsModel], x: Union[MVNSqrt, MVNStandard], param=None):
     """
     Cubature linearization for a non-linear function f(x, q). While this may look inefficient for functions with
     additive noise, JAX relies on XLA which compresses linear operations. This means that in practice our code will only
@@ -29,9 +29,9 @@ def linearize(model: Union[FunctionalModel, ConditionalMomentsModel], x: Union[M
     """
     if isinstance(model, FunctionalModel):
         f, q = model
-        return linearize_functional(f, x, q, _get_sigma_points)
+        return linearize_functional(f, x, q, _get_sigma_points, param)
     conditional_mean, conditional_covariance_or_cholesky = model
-    return linearize_conditional(conditional_mean, conditional_covariance_or_cholesky, x, _get_sigma_points)
+    return linearize_conditional(conditional_mean, conditional_covariance_or_cholesky, x, _get_sigma_points, param)
 
 
 def _get_sigma_points(mvn: MVNSqrt) -> Tuple[SigmaPoints, jnp.ndarray]:

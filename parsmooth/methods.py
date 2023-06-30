@@ -18,21 +18,24 @@ def filtering(observations: jnp.ndarray,
               linearization_method: Callable,
               nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
               parallel: bool = True,
-              return_loglikelihood: bool = False):
+              return_loglikelihood: bool = False,
+              params_transition: jnp.ndarray = None,
+              params_observation: jnp.ndarray = None):
     if parallel:
         return par_filtering(observations, x0, transition_model, observation_model, linearization_method,
-                             nominal_trajectory, return_loglikelihood)
+                             nominal_trajectory, return_loglikelihood, params_transition, params_observation)
     return seq_filtering(observations, x0, transition_model, observation_model, linearization_method,
-                         nominal_trajectory, return_loglikelihood)
+                         nominal_trajectory, return_loglikelihood, params_transition, params_observation)
 
 
 def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
               filter_trajectory: Union[MVNSqrt, MVNStandard],
               linearization_method: Callable, nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-              parallel: bool = True):
+              parallel: bool = True,
+              params_transition: jnp.ndarray = None):
     if parallel:
-        return par_smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory)
-    return seq_smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory)
+        return par_smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory, params_transition)
+    return seq_smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory, params_transition)
 
 
 def filter_smoother(observations: jnp.ndarray,
@@ -41,9 +44,11 @@ def filter_smoother(observations: jnp.ndarray,
                     observation_model: Union[FunctionalModel, ConditionalMomentsModel],
                     linearization_method: Callable,
                     nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-                    parallel: bool = True):
+                    parallel: bool = True,
+                    params_transition: jnp.ndarray = None,
+                    params_observation: jnp.ndarray = None):
     filter_trajectory = filtering(observations, x0, transition_model, observation_model, linearization_method,
-                                  nominal_trajectory, parallel)
+                                  nominal_trajectory, parallel, params_transition, params_observation)
     return smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory, parallel)
 
 
@@ -59,19 +64,22 @@ def iterated_smoothing(observations: jnp.ndarray,
                        init_nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
                        parallel: bool = True,
                        criterion: Callable = _default_criterion,
-                       return_loglikelihood: bool = False):
+                       return_loglikelihood: bool = False,
+                       params_transition: jnp.ndarray = None,
+                       params_observation: jnp.ndarray = None
+                       ):
     if init_nominal_trajectory is None:
         init_nominal_trajectory = filter_smoother(observations, x0, transition_model, observation_model,
-                                                  linearization_method, None, parallel)
+                                                  linearization_method, None, parallel, params_transition, params_observation)
 
     def fun_to_iter(curr_nominal_traj):
         return filter_smoother(observations, x0, transition_model, observation_model, linearization_method,
-                               curr_nominal_traj, parallel)
+                               curr_nominal_traj, parallel, params_transition, params_observation)
 
     nominal_traj = fixed_point(fun_to_iter, init_nominal_trajectory, criterion)
     if return_loglikelihood:
         _, ell = filtering(observations, x0, transition_model, observation_model, linearization_method,
-                           nominal_traj, parallel, return_loglikelihood=True)
+                           nominal_traj, parallel, return_loglikelihood=True, params_transition=params_transition, params_observation=params_observation)
         return nominal_traj, ell
     return nominal_traj
 
@@ -82,10 +90,11 @@ def sampling(key: jnp.ndarray,
              filter_trajectory: MVNSqrt or MVNStandard,
              linearization_method: Callable,
              nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-             parallel: bool = True):
+             parallel: bool = True,
+             params_transition: jnp.ndarray = None):
     nominal_trajectory = nominal_trajectory or smoothing(transition_model, filter_trajectory, linearization_method,
-                                                         None, parallel)
+                                                         None, parallel, params_transition)
     if parallel:
         return _par_sampling(key, n_samples, transition_model, filter_trajectory, linearization_method,
-                             nominal_trajectory)
-    return _seq_sampling(key, n_samples, transition_model, filter_trajectory, linearization_method, nominal_trajectory)
+                             nominal_trajectory, params_transition)
+    return _seq_sampling(key, n_samples, transition_model, filter_trajectory, linearization_method, nominal_trajectory, params_transition)
