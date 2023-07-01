@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -16,8 +16,8 @@ def filtering(observations: jnp.ndarray,
               linearization_method: Callable,
               nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
               return_loglikelihood=False,
-              params_transition: Optional[jnp.ndarray] = None,
-              params_observation: Optional[jnp.ndarray] = None):
+              params_transition: Optional[Tuple] = None,
+              params_observation: Optional[Tuple] = None):
     T = observations.shape[0]
     m0, chol_or_cov_0 = x0
     if nominal_trajectory is not None:

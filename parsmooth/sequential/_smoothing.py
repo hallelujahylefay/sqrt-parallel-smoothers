@@ -1,4 +1,4 @@
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -12,7 +12,7 @@ def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
               filter_trajectory: Union[MVNSqrt, MVNStandard],
               linearization_method: Callable,
               nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-              params_transition: jnp.ndarray = None):
+              params_transition: Tuple = None):
     last_state = jax.tree_map(lambda z: z[-1], filter_trajectory)
 
     if nominal_trajectory is not None:

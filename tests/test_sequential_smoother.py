@@ -10,6 +10,7 @@ from parsmooth.linearization import cubature, extended
 from parsmooth.sequential._filtering import filtering
 from parsmooth.sequential._smoothing import _standard_smooth, _sqrt_smooth, smoothing
 from tests._lgssm import get_data, transition_function as lgssm_f, observation_function as lgssm_h
+from tests._lgssm_params import transition_function as lgssm_f_params, observation_function as lgssm_h_params
 from tests._test_utils import get_system
 
 LIST_LINEARIZATIONS = [cubature, extended]
@@ -146,6 +147,45 @@ def test_all_smoothers_agree(dim_x, dim_y, seed):
         sqrt_filtered_states = filtering(observations, chol_x0, sqrt_transition_model, sqrt_observation_model, method,
                                          None)
         sqrt_smoothed_states = smoothing(sqrt_transition_model, sqrt_filtered_states, method, None)
+        res.append(smoothed_states)
+        res.append(sqrt_smoothed_states)
+
+    for res_1, res_2 in zip(res[:-1], res[1:]):
+        np.testing.assert_array_almost_equal(res_1.mean, res_2.mean, decimal=3)
+
+
+@pytest.mark.parametrize("dim_x", [1, 3])
+@pytest.mark.parametrize("dim_y", [2, 3])
+@pytest.mark.parametrize("seed", [0, 42])
+def test_all_smoothers_agree_params(dim_x, dim_y, seed):
+    np.random.seed(seed)
+    T = 5
+    ts = np.linspace(1, T + 1, T + 1)
+
+    x0, chol_x0, F, Q, cholQ, b, _ = get_system(dim_x, dim_x)
+    _, _, H, R, cholR, c, _ = get_system(dim_x, dim_y)
+
+    def lgssm_f_p(x, t):
+        return lgssm_f_params(x, A=F, t=t) # partial does not work.
+    def lgssm_h_p(x, t):
+        return lgssm_h_params(x, H=H, t=t)
+
+    true_states, observations = get_data(x0.mean, F, H, R, Q, b, c, T)
+    sqrt_transition_model = FunctionalModel(lgssm_f_p, MVNSqrt(b, cholQ))
+    sqrt_observation_model = FunctionalModel(lgssm_h_p, MVNSqrt(c, cholR))
+
+    transition_model = FunctionalModel(lgssm_f_p, MVNStandard(b, Q))
+    observation_model = FunctionalModel(lgssm_h_p, MVNStandard(c, R))
+
+    res = []
+    for method in LIST_LINEARIZATIONS:
+        filtered_states = filtering(observations, x0, transition_model, observation_model, method,
+                                    None, params_transition=(ts, ), params_observation=(ts, ))
+        smoothed_states = smoothing(transition_model, filtered_states, method, None, params_transition=(ts, ))
+
+        sqrt_filtered_states = filtering(observations, chol_x0, sqrt_transition_model, sqrt_observation_model, method,
+                                         None, params_transition=(ts, ), params_observation=(ts, ))
+        sqrt_smoothed_states = smoothing(sqrt_transition_model, sqrt_filtered_states, method, None, params_transition=(ts, ))
         res.append(smoothed_states)
         res.append(sqrt_smoothed_states)
 

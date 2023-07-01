@@ -12,6 +12,7 @@ from parsmooth.methods import sampling
 from parsmooth.sequential._filtering import filtering
 from parsmooth.sequential._smoothing import smoothing
 from tests._lgssm import get_data, transition_function as lgssm_f, observation_function as lgssm_h
+from tests._lgssm_params import transition_function as lgssm_f_params, observation_function as lgssm_h_params
 from tests._test_utils import get_system
 
 LIST_LINEARIZATIONS = [cubature, extended]
@@ -55,6 +56,57 @@ def test_samples_marginals(dim_x, dim_y, seed, linearization, jax_seed, parallel
         sqrt_smoothed_states = MVNSqrt(smoothed_states.mean, jax.vmap(jnp.linalg.cholesky)(smoothed_states.cov))
         sqrt_samples = sampling(key, N, sqrt_transition_model, sqrt_filtered_states, method, sqrt_smoothed_states,
                                 parallel=parallel)
+
+        print(kstest(samples[0][:, 0], "norm", (smoothed_states.mean[0, 0], smoothed_states.cov[0, 0, 0])))
+
+        np.testing.assert_allclose(samples.mean(1), smoothed_states.mean, rtol=1e-2, atol=1e-2)
+        np.testing.assert_allclose(samples.var(1), np.diagonal(smoothed_states.cov, axis1=1, axis2=2),
+                                   rtol=1e-2, atol=1e-2)
+        np.testing.assert_allclose(sqrt_samples.mean(1), sqrt_smoothed_states.mean,
+                                   rtol=1e-2, atol=1e-2)
+        np.testing.assert_allclose(sqrt_samples.var(1), np.diagonal(smoothed_states.cov, axis1=1, axis2=2),
+                                   rtol=1e-2, atol=1e-2)
+
+
+@pytest.mark.parametrize("dim_x", [1, 3])
+@pytest.mark.parametrize("dim_y", [2, 3])
+@pytest.mark.parametrize("seed", [0])
+@pytest.mark.parametrize("linearization", LIST_LINEARIZATIONS)
+@pytest.mark.parametrize("jax_seed", [123])
+@pytest.mark.parametrize("parallel", [False, True])
+def test_samples_marginals_params(dim_x, dim_y, seed, linearization, jax_seed, parallel):
+    np.random.seed(seed)
+    key = jax.random.PRNGKey(jax_seed)
+
+    T = 10
+    ts = np.linspace(1, T + 1, T + 1)
+    N = 100_000
+
+    x0, chol_x0, F, Q, cholQ, b, _ = get_system(dim_x, dim_x)
+    _, _, H, R, cholR, c, _ = get_system(dim_x, dim_y)
+
+    _, ys = get_data(x0.mean, F, H, R, Q, b, c, T)
+
+    def lgssm_f_p(x, t):
+        return lgssm_f_params(x, A=F, t=t) # partial does not work.
+    def lgssm_h_p(x, t):
+        return lgssm_h_params(x, H=H, t=t)
+
+    sqrt_transition_model = FunctionalModel(lgssm_f_p, MVNSqrt(b, cholQ))
+
+    transition_model = FunctionalModel(lgssm_f_p, MVNStandard(b, Q))
+    observation_model = FunctionalModel(lgssm_h_p, MVNStandard(c, R))
+
+    for method in LIST_LINEARIZATIONS:
+        filtered_states = filtering(ys, x0, transition_model, observation_model, method, params_observation=(ts, ), params_transition=(ts, ))
+        smoothed_states = smoothing(transition_model, filtered_states, method, params_transition=(ts, ))
+        samples = sampling(key, N, transition_model, filtered_states, method, smoothed_states, parallel=parallel,
+                           params_transition=(ts, ))
+
+        sqrt_filtered_states = MVNSqrt(filtered_states.mean, jax.vmap(jnp.linalg.cholesky)(filtered_states.cov))
+        sqrt_smoothed_states = MVNSqrt(smoothed_states.mean, jax.vmap(jnp.linalg.cholesky)(smoothed_states.cov))
+        sqrt_samples = sampling(key, N, sqrt_transition_model, sqrt_filtered_states, method, sqrt_smoothed_states,
+                                parallel=parallel, params_transition=(ts, ))
 
         print(kstest(samples[0][:, 0], "norm", (smoothed_states.mean[0, 0], smoothed_states.cov[0, 0, 0])))
 

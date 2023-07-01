@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Callable, Union
+from typing import Callable, Union, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -14,9 +14,10 @@ def _par_sampling(key: jnp.ndarray,
                   transition_model: FunctionalModel,
                   filter_trajectory: MVNSqrt or MVNStandard,
                   linearization_method: Callable,
-                  nominal_trajectory: Union[MVNSqrt, MVNStandard]):
+                  nominal_trajectory: Union[MVNSqrt, MVNStandard],
+                  params_transition: Tuple):
     gains, incs, last_state_sample = _sampling_common(key, n_samples, transition_model, filter_trajectory,
-                                                      linearization_method, nominal_trajectory)
+                                                      linearization_method, nominal_trajectory, params_transition)
 
     @jax.vmap
     def operator(elem1, elem2):
@@ -43,7 +44,7 @@ def _seq_sampling(key: jnp.ndarray,
                   filter_trajectory: MVNSqrt or MVNStandard,
                   linearization_method: Callable,
                   nominal_trajectory: Union[MVNSqrt, MVNStandard],
-                  params_transition: jnp.ndarray):
+                  params_transition: Tuple):
     gains, incs, last_state_sample = _sampling_common(key, n_samples, transition_model, filter_trajectory,
                                                       linearization_method, nominal_trajectory, params_transition)
 
@@ -67,7 +68,7 @@ def _sampling_common(key: jnp.ndarray,
                      filter_trajectory: MVNSqrt or MVNStandard,
                      linearization_method: Callable,
                      nominal_trajectory: Union[MVNSqrt, MVNStandard],
-                     params_transition: jnp.ndarray):
+                     params_transition: Tuple):
     last_state = jax.tree_map(lambda z: z[-1], filter_trajectory)
     filter_trajectory = none_or_shift(filter_trajectory, -1)
     F_x, cov_or_chol, b = jax.vmap(linearization_method, in_axes=[None, 0, 0])(transition_model,

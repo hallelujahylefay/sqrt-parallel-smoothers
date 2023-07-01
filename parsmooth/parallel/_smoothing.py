@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -14,7 +14,7 @@ def smoothing(transition_model: Union[FunctionalModel, ConditionalMomentsModel],
               filter_trajectory: Union[MVNSqrt, MVNStandard],
               linearization_method: Callable,
               nominal_trajectory: Optional[Union[MVNSqrt, MVNStandard]] = None,
-              params_transition: jnp.ndarray = None):
+              params_transition: Tuple = None):
     if nominal_trajectory is not None:
         are_inputs_compatible(filter_trajectory, nominal_trajectory)
 

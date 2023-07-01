@@ -64,12 +64,10 @@ def _linearize_callable_common(f, x, param=None) -> Tuple[Any, Any]:
 
 
 def _standard_linearize_callable(f, x, m_q, cov_q, param=None):
-    y = (x,) if param is None else (x, *param)
-    res, F_x = _linearize_callable_common(f, *y)
+    res, F_x = _linearize_callable_common(f, x, param)
     return F_x, cov_q, res - F_x @ x + m_q
 
 
 def _sqrt_linearize_callable(f, x, m_q, chol_q, param=None):
-    y = (x,) if param is None else (x, *param)
-    res, F_x = _linearize_callable_common(f, *y)
+    res, F_x = _linearize_callable_common(f, x, param)
     return F_x, chol_q, res - F_x @ x + m_q
