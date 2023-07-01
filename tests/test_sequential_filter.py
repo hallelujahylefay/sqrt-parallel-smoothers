@@ -227,7 +227,7 @@ def test_all_filters_agree_params(dim_x, dim_y, seed):
     _, _, H, R, cholR, c, _ = get_system(dim_x, dim_y)
 
     def lgssm_f_p(x, t):
-        return lgssm_f_params(x, A=F, t=t)
+        return lgssm_f_params(x, A=F, t=t) # partial does not work.
     def lgssm_h_p(x, t):
         return lgssm_h_params(x, H=H, t=t)
 
@@ -241,7 +241,7 @@ def test_all_filters_agree_params(dim_x, dim_y, seed):
 
     res = []
     for method in LIST_LINEARIZATIONS:
-        filtered_states = filtering(observations, x0, transition_model, observation_model, method, None, params_transition=ts, params_observation=ts)
+        filtered_states = filtering(observations, x0, transition_model, observation_model, method, None, params_transition=(ts, ), params_observation=(ts, ))
         sqrt_filtered_states = filtering(observations, chol_x0, sqrt_transition_model, sqrt_observation_model, method,
                                          None, params_transition=(ts, ), params_observation=(ts, ))
         res.append(filtered_states)
