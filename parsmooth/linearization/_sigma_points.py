@@ -22,7 +22,7 @@ def _cov(wc, x_pts, x_mean, y_points, y_mean):
     return jnp.dot(one, two)
 
 
-def linearize_conditional(c_m, c_cov_or_chol, x, get_sigma_points, param):
+def linearize_conditional(c_m, c_cov_or_chol, x, get_sigma_points, param=None):
     _c_m = lambda z: c_m(z, *param) if param is not None else c_m(z)
     _c_cov_or_chol = lambda z: c_cov_or_chol(z, *param) if param is not None else c_cov_or_chol(z)
 
@@ -63,7 +63,7 @@ def linearize_conditional(c_m, c_cov_or_chol, x, get_sigma_points, param):
     return F_x, L, m_f - F_x @ m_x
 
 
-def linearize_functional(f, x, q, get_sigma_points, param):
+def linearize_functional(f, x, q, get_sigma_points, param=None):
     are_inputs_compatible(x, q)
 
     F_x, x_pts, f_pts, m_f = _linearize_functional_common(f, x, get_sigma_points, param)
@@ -88,7 +88,7 @@ def linearize_functional(f, x, q, get_sigma_points, param):
     return F_x, 0.5 * (L + L.T), m_f - F_x @ m_x + m_q
 
 
-def _linearize_functional_common(f, x, get_sigma_points, param):
+def _linearize_functional_common(f, x, get_sigma_points, param=None):
     _f = lambda z: f(z, *param) if param is not None else f(z) #param..
 
     x = get_mvnsqrt(x)
