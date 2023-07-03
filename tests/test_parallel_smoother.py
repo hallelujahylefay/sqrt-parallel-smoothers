@@ -11,6 +11,7 @@ from parsmooth.parallel._smoothing import _standard_associative_params, _sqrt_as
 from parsmooth.sequential._filtering import filtering as seq_filtering
 from parsmooth.sequential._smoothing import smoothing as seq_smoothing
 from tests._lgssm import transition_function as lgssm_f, observation_function as lgssm_h, get_data
+from tests._lgssm_params import transition_function as lgssm_f_params
 from tests._test_utils import get_system
 
 LIST_LINEARIZATIONS = [cubature, extended]
@@ -48,6 +49,40 @@ def test_params_standard_vs_sqrt(dim_x, dim_y, seed, linearization_method):
                                                    x0.cov)
     g_sqrt, E_sqrt, D = _sqrt_associative_params(linearization_method, sqrt_transition_model, x_nominal_sqrt,
                                                  chol_x0.mean, chol_x0.chol)
+
+    np.testing.assert_allclose(g_std, g_sqrt)
+    np.testing.assert_allclose(E_std, E_sqrt)
+    np.testing.assert_allclose(L, D @ D.T)
+
+
+@pytest.mark.parametrize("dim_x", [1, 2, 3])
+@pytest.mark.parametrize("dim_y", [1, 2, 3])
+@pytest.mark.parametrize("seed", [0, 42])
+@pytest.mark.parametrize("linearization_method", LIST_LINEARIZATIONS)
+def test_params_standard_vs_sqrt_params(dim_x, dim_y, seed, linearization_method):
+    np.random.seed(seed)
+
+    x0, chol_x0, F, Q, cholQ, b, _ = get_system(dim_x, dim_x)
+
+    _, _, H, R, cholR, c, _ = get_system(dim_x, dim_y)
+    m_nominal = np.random.randn(dim_x)
+    P_nominal = np.eye(dim_x, dim_x)
+    cholP_nominal = P_nominal
+    x_nominal_sqrt = MVNSqrt(m_nominal, cholP_nominal)
+    x_nominal_std = MVNStandard(m_nominal, P_nominal)
+    y = np.random.randn()
+
+    def lgssm_f_p(x, t):
+        return lgssm_f_params(x, A=F, t=t)  # partial does not work.
+
+    sqrt_transition_model = FunctionalModel(lgssm_f_p, MVNSqrt(b, cholQ))
+
+    transition_model = FunctionalModel(lgssm_f_p, MVNStandard(b, Q))
+
+    g_std, E_std, L = _standard_associative_params(linearization_method, transition_model, x_nominal_std, x0.mean,
+                                                   x0.cov, p_t_k=(0.5, ))
+    g_sqrt, E_sqrt, D = _sqrt_associative_params(linearization_method, sqrt_transition_model, x_nominal_sqrt,
+                                                 chol_x0.mean, chol_x0.chol, p_t_k=(0.5, ))
 
     np.testing.assert_allclose(g_std, g_sqrt)
     np.testing.assert_allclose(E_std, E_sqrt)

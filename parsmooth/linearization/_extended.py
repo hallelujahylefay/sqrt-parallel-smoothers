@@ -17,7 +17,8 @@ def linearize(model: Union[FunctionalModel, ConditionalMomentsModel], x: Union[M
         The function to be called on x and q
     x: Union[MVNSqrt, MVNStandard]
         x-coordinate state at which to linearize f
-
+    param : Optional[Tuple]
+        Parameters for f, e.g time in the case of inhomogeneous processes for the observation function.
     Returns
     -------
     F_x, F_q, res: jnp.ndarray

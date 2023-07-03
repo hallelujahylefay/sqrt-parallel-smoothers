@@ -11,6 +11,7 @@ from parsmooth.methods import iterated_smoothing
 from parsmooth.sequential._filtering import filtering as seq_filtering
 from parsmooth.sequential._smoothing import smoothing as seq_smoothing
 from tests._lgssm import transition_function as lgssm_f, observation_function as lgssm_h, get_data
+from tests._lgssm_params import transition_function as lgssm_f_params, observation_function as lgssm_h_params
 from tests._test_utils import get_system
 
 LIST_LINEARIZATIONS = [cubature, extended]
@@ -60,6 +61,59 @@ def test_linear(dim_x, dim_y, seed, linearization_method, parallel):
     sqrt_iterated_res = iterated_smoothing(observations, chol_x0, sqrt_transition_model, sqrt_observation_model,
                                            linearization_method, x_nominal_sqrt, parallel,
                                            criterion=lambda i, *_: i < 5)
+
+    np.testing.assert_array_almost_equal(iterated_res.mean, seq_smoother_res.mean, decimal=4)
+    np.testing.assert_array_almost_equal(iterated_res.cov, seq_smoother_res.cov, decimal=4)
+    np.testing.assert_array_almost_equal(sqrt_iterated_res.mean, seq_smoother_res.mean, decimal=4)
+    np.testing.assert_array_almost_equal(
+        sqrt_iterated_res.chol @ np.transpose(sqrt_iterated_res.chol, [0, 2, 1]),
+        seq_smoother_res.cov, decimal=4)
+
+
+@pytest.mark.parametrize("dim_x", [1, 2])
+@pytest.mark.parametrize("dim_y", [1, 2])
+@pytest.mark.parametrize("seed", [0])
+@pytest.mark.parametrize("linearization_method", LIST_LINEARIZATIONS)
+@pytest.mark.parametrize("parallel", [True, False])
+def test_linear_params(dim_x, dim_y, seed, linearization_method, parallel):
+    np.random.seed(seed)
+    T = 5
+    ts = np.linspace(1, 2, T + 1)
+
+    x0, chol_x0, F, Q, cholQ, b, _ = get_system(dim_x, dim_x)
+
+    _, _, H, R, cholR, c, _ = get_system(dim_x, dim_y)
+
+    m_nominal = np.random.randn(T + 1, dim_x)
+    P_nominal = np.repeat(np.eye(dim_x, dim_x)[None, ...], T + 1, axis=0)
+    cholP_nominal = P_nominal
+    x_nominal_sqrt = MVNSqrt(m_nominal, cholP_nominal)
+    x_nominal = MVNStandard(m_nominal, P_nominal)
+
+    true_states, observations = get_data(x0.mean, F, H, R, Q, b, c, T)
+
+    def lgssm_f_p(x, t):
+        return lgssm_f_params(x, A=F, t=t)  # partial does not work.
+
+    def lgssm_h_p(x, t):
+        return lgssm_h_params(x, H=H, t=t)
+
+    sqrt_transition_model = FunctionalModel(lgssm_f_p, MVNSqrt(b, cholQ))
+    sqrt_observation_model = FunctionalModel(lgssm_h_p, MVNSqrt(c, cholR))
+
+    transition_model = FunctionalModel(lgssm_f_p, MVNStandard(b, Q))
+    observation_model = FunctionalModel(lgssm_h_p, MVNStandard(c, R))
+
+    seq_filter_res = seq_filtering(observations, x0, transition_model, observation_model, linearization_method,
+                                   x_nominal, params_observation=(ts,), params_transition=(ts,))
+    seq_smoother_res = seq_smoothing(transition_model, seq_filter_res, linearization_method, params_transition=(ts,))
+
+    iterated_res = iterated_smoothing(observations, x0, transition_model, observation_model, linearization_method,
+                                      x_nominal, parallel, criterion=lambda i, *_: i < 5, params_observation=(ts,), params_transition=(ts,))
+
+    sqrt_iterated_res = iterated_smoothing(observations, chol_x0, sqrt_transition_model, sqrt_observation_model,
+                                           linearization_method, x_nominal_sqrt, parallel,
+                                           criterion=lambda i, *_: i < 5, params_observation=(ts,), params_transition=(ts,))
 
     np.testing.assert_array_almost_equal(iterated_res.mean, seq_smoother_res.mean, decimal=4)
     np.testing.assert_array_almost_equal(iterated_res.cov, seq_smoother_res.cov, decimal=4)

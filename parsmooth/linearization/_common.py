@@ -39,6 +39,8 @@ def get_conditional_model(f, q: Union[MVNSqrt, MVNStandard], linearization_metho
     # FIXME: This will not work if dim(q) != dim(x) yet. We need to rewrite the conditional moments linearization
     #        a bit to make it work for free.
 
+    # TODO: Manage parameters dependent function.
+
     sqrt = isinstance(q, MVNSqrt)
     try:
         f(q.mean, q.mean)

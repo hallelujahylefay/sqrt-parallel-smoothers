@@ -48,8 +48,8 @@ def filter_smoother(observations: jnp.ndarray,
                     params_transition: Tuple = None,
                     params_observation: Tuple = None):
     filter_trajectory = filtering(observations, x0, transition_model, observation_model, linearization_method,
-                                  nominal_trajectory, parallel, params_transition, params_observation)
-    return smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory, parallel)
+                                  nominal_trajectory, parallel, params_transition=params_transition, params_observation=params_observation)
+    return smoothing(transition_model, filter_trajectory, linearization_method, nominal_trajectory, parallel, params_transition=params_transition)
 
 
 def _default_criterion(_i, nominal_traj_prev, curr_nominal_traj):

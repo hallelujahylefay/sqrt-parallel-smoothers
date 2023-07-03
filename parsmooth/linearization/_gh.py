@@ -11,7 +11,7 @@ from parsmooth.linearization._sigma_points import SigmaPoints, linearize_functio
 
 
 def linearize(model: Union[FunctionalModel, ConditionalMomentsModel],
-              x: Union[MVNSqrt, MVNStandard], order: int = 3):
+              x: Union[MVNSqrt, MVNStandard], order: int = 3, param=None):
     """
     Gauss-Hermite linearization for a non-linear function f(x, q). While this may look inefficient for functions with
     additive noise, JAX relies on XLA which compresses linear operations. This means that in practice our code will only
@@ -25,7 +25,8 @@ def linearize(model: Union[FunctionalModel, ConditionalMomentsModel],
         x-coordinate state at which to linearize f
     order: int, optional
         Order of the Gauss-Hermite integration method. Default is 3.
-
+    param : Optional[Tuple]
+        Parameters for f, e.g time in the case of inhomogeneous processes for the observation function.
     Returns
     -------
     F_x, F_q, res: jnp.ndarray
@@ -36,9 +37,9 @@ def linearize(model: Union[FunctionalModel, ConditionalMomentsModel],
     get_sigma_points = lambda mvn: _get_sigma_points(mvn, order)
     if isinstance(model, FunctionalModel):
         f, q = model
-        return linearize_functional(f, x, q, get_sigma_points)
+        return linearize_functional(f, x, q, get_sigma_points, param)
     conditional_mean, conditional_covariance_or_cholesky = model
-    return linearize_conditional(conditional_mean, conditional_covariance_or_cholesky, x, get_sigma_points)
+    return linearize_conditional(conditional_mean, conditional_covariance_or_cholesky, x, get_sigma_points, param)
 
 
 @partial(jax.jit, static_argnums=(1,))

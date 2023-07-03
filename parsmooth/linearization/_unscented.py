@@ -9,7 +9,8 @@ from parsmooth.linearization._sigma_points import SigmaPoints, linearize_functio
 
 def linearize(model: Union[FunctionalModel, ConditionalMomentsModel],
               x: Union[MVNSqrt, MVNStandard],
-              alpha: float = 1., beta: float = 0., kappa: float = None):
+              alpha: float = 1., beta: float = 0., kappa: float = None,
+              param=None):
     """
     Unscented linearization for a non-linear function f(x, q). While this may look inefficient for functions with
     additive noise, JAX relies on XLA which compresses linear operations. This means that in practice our code will only
@@ -23,7 +24,8 @@ def linearize(model: Union[FunctionalModel, ConditionalMomentsModel],
         x-coordinate state at which to linearize f
     alpha, beta, kappa: float, optional
         Parameters of the unscented transform. Default is `alpha=1.`, `beta=0.` and `kappa=3-n`
-
+    param : Optional[Tuple]
+        Parameters for f, e.g time in the case of inhomogeneous processes for the observation function.
     Returns
     -------
     F_x, F_q, res: jnp.ndarray
@@ -34,9 +36,9 @@ def linearize(model: Union[FunctionalModel, ConditionalMomentsModel],
     get_sigma_points = lambda mvn: _get_sigma_points(mvn, alpha, beta, kappa)
     if isinstance(model, FunctionalModel):
         f, q = model
-        return linearize_functional(f, x, q, get_sigma_points)
+        return linearize_functional(f, x, q, get_sigma_points, param)
     conditional_mean, conditional_covariance_or_cholesky = model
-    return linearize_conditional(conditional_mean, conditional_covariance_or_cholesky, x, get_sigma_points)
+    return linearize_conditional(conditional_mean, conditional_covariance_or_cholesky, x, get_sigma_points, param)
 
 
 def _get_sigma_points(

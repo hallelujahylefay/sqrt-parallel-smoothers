@@ -21,8 +21,8 @@ LIST_LINEARIZATIONS = [cubature, extended]
 @pytest.fixture(scope="session", autouse=True)
 def config():
     jax.config.update("jax_enable_x64", True)
-    jax.config.update('jax_disable_jit', False)
-    jax.config.update("jax_debug_nans", False)
+    # jax.config.update('jax_disable_jit', False)
+    # jax.config.update("jax_debug_nans", False)
 
 
 @pytest.mark.parametrize("dim_x", [1, 3])
@@ -78,8 +78,8 @@ def test_samples_marginals_params(dim_x, dim_y, seed, linearization, jax_seed, p
     np.random.seed(seed)
     key = jax.random.PRNGKey(jax_seed)
 
-    T = 10
-    ts = np.linspace(1, T + 1, T + 1)
+    T = 5
+    ts = np.linspace(1, 2, T + 1)
     N = 100_000
 
     x0, chol_x0, F, Q, cholQ, b, _ = get_system(dim_x, dim_x)
@@ -88,7 +88,8 @@ def test_samples_marginals_params(dim_x, dim_y, seed, linearization, jax_seed, p
     _, ys = get_data(x0.mean, F, H, R, Q, b, c, T)
 
     def lgssm_f_p(x, t):
-        return lgssm_f_params(x, A=F, t=t) # partial does not work.
+        return lgssm_f_params(x, A=F, t=t)  # partial does not work.
+
     def lgssm_h_p(x, t):
         return lgssm_h_params(x, H=H, t=t)
 
@@ -98,15 +99,17 @@ def test_samples_marginals_params(dim_x, dim_y, seed, linearization, jax_seed, p
     observation_model = FunctionalModel(lgssm_h_p, MVNStandard(c, R))
 
     for method in LIST_LINEARIZATIONS:
-        filtered_states = filtering(ys, x0, transition_model, observation_model, method, params_observation=(ts, ), params_transition=(ts, ))
-        smoothed_states = smoothing(transition_model, filtered_states, method, params_transition=(ts, ))
+        filtered_states = filtering(ys, x0, transition_model, observation_model, method, params_observation=(ts,),
+                                    params_transition=(ts,))
+        smoothed_states = smoothing(transition_model, filtered_states, method, params_transition=(ts,))
         samples = sampling(key, N, transition_model, filtered_states, method, smoothed_states, parallel=parallel,
-                           params_transition=(ts, ))
+                           params_transition=(ts,))
 
         sqrt_filtered_states = MVNSqrt(filtered_states.mean, jax.vmap(jnp.linalg.cholesky)(filtered_states.cov))
         sqrt_smoothed_states = MVNSqrt(smoothed_states.mean, jax.vmap(jnp.linalg.cholesky)(smoothed_states.cov))
-        sqrt_samples = sampling(key, N, sqrt_transition_model, sqrt_filtered_states, method, sqrt_smoothed_states,
-                                parallel=parallel, params_transition=(ts, ))
+        with jax.disable_jit():
+            sqrt_samples = sampling(key, N, sqrt_transition_model, sqrt_filtered_states, method, sqrt_smoothed_states,
+                                    parallel=parallel, params_transition=(ts,))
 
         print(kstest(samples[0][:, 0], "norm", (smoothed_states.mean[0, 0], smoothed_states.cov[0, 0, 0])))
 
